@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<?import javafx.scene.control.TableColumn?>
+<?import javafx.scene.control.TableView?>
+
+<?import javafx.scene.text.Text?>
+<VBox alignment="CENTER" prefHeight="600.0" prefWidth="1200.0" style="-fx-font-family: 'Meslo LG L DZ for Powerline'"
+      xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="ru.gb.file.manager.client.ClientController">
+    <MenuBar VBox.vgrow="ALWAYS">
+        <Menu text="File">
+            <MenuItem text="Exit" onAction="#menuItemFileExitAction"/>
+        </Menu>
+        <Menu text="Server">
+            <MenuItem text="Disconnect" onAction="#menuItemDisconnectFromServer"/>
+        </Menu>
+    </MenuBar>
+    <VBox VBox.vgrow="ALWAYS">
+        <HBox alignment="CENTER_RIGHT" spacing="5.0" VBox.vgrow="ALWAYS">
+            <TextField fx:id="loginField" prefHeight="32.0" prefWidth="170.0" promptText="Login"
+                       focusTraversable="false">
+                <padding>
+                    <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                </padding>
+            </TextField>
+            <TextField fx:id="passwordField" prefHeight="32.0" prefWidth="170.0" promptText="Password"
+                       focusTraversable="false">
+                <padding>
+                    <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                </padding>
+            </TextField>
+            <Button fx:id="signInButton" visible="false" managed="false" mnemonicParsing="false" prefHeight="32.0"
+                    prefWidth="70.0"
+                    onAction="#signInButtonAction" text="Sign In">
+                <padding>
+                    <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                </padding>
+            </Button>
+            <Button fx:id="logInButton" mnemonicParsing="false" prefHeight="32.0" prefWidth="70.0"
+                    onAction="#logInButtonAction" text="Log In">
+                <padding>
+                    <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                </padding>
+            </Button>
+            <padding>
+                <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+            </padding>
+        </HBox>
+    </VBox>
+    <HBox VBox.vgrow="ALWAYS">
+        <VBox spacing="5.0" HBox.hgrow="ALWAYS">
+            <TextField fx:id="clientPathField" VBox.vgrow="ALWAYS" focusTraversable="false"/>
+            <TableView fx:id="clientTableView" VBox.vgrow="ALWAYS" onMouseClicked="#clientTableViewClickedItem">
+                <columns>
+                    <TableColumn fx:id="clientColumnFileName" prefWidth="250.0"
+                                 resizable="false" text="File name"/>
+                    <TableColumn fx:id="clientColumnFileExt" prefWidth="50.0" text="Ext"/>
+                    <TableColumn fx:id="clientColumnFileLength" prefWidth="75.0" text="Size"/>
+                    <TableColumn fx:id="clientColumnFileModifyDate" minWidth="180.0"
+                                 prefWidth="-1.0" text="Date Modified"/>
+                </columns>
+            </TableView>
+            <HBox spacing="5.0" VBox.vgrow="ALWAYS">
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="TOUCH" HBox.hgrow="ALWAYS">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="MKDIR" HBox.hgrow="ALWAYS">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="RM" HBox.hgrow="ALWAYS">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="UPLOAD" HBox.hgrow="ALWAYS">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <padding>
+                    <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                </padding>
+            </HBox>
+            <padding>
+                <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+            </padding>
+        </VBox>
+        <VBox alignment="CENTER" spacing="5.0">
+            <Button alignment="CENTER" mnemonicParsing="false" prefHeight="70.0" prefWidth="70.0" text="&lt;">
+                <padding>
+                    <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                </padding>
+            </Button>
+            <Button alignment="CENTER" mnemonicParsing="false" prefHeight="70.0" prefWidth="70.0" text="&gt;">
+                <padding>
+                    <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                </padding>
+            </Button>
+            <padding>
+                <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+            </padding>
+        </VBox>
+        <VBox spacing="5.0" HBox.hgrow="ALWAYS">
+            <TextField  fx:id="serverPathField" VBox.vgrow="ALWAYS" promptText="Please Log In to see files on Server"/>
+            <TableView fx:id="serverTableView" VBox.vgrow="ALWAYS" onMouseClicked="#serverTableViewClickedItem">
+                <columns>
+                    <TableColumn fx:id="serverColumnFileName" maxWidth="1.7976931348623157E308" prefWidth="250.0" resizable="false"
+                                 text="File name"/>
+                    <TableColumn fx:id="serverColumnFileExt" prefWidth="50.0" text="Ext"/>
+                    <TableColumn fx:id="serverColumnFileLength" prefWidth="75.0" text="Size"/>
+                    <TableColumn fx:id="serverColumnFileModifyDate" maxWidth="1.7976931348623157E308" minWidth="150.0" prefWidth="-1.0" text="Size"/>
+                </columns>
+            </TableView>
+            <HBox spacing="5.0" VBox.vgrow="ALWAYS">
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="TOUCH" HBox.hgrow="ALWAYS">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="MKDIR" HBox.hgrow="ALWAYS">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="RM" HBox.hgrow="ALWAYS">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="DOWNLOAD" HBox.hgrow="ALWAYS">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <padding>
+                    <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                </padding>
+            </HBox>
+            <padding>
+                <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+            </padding>
+        </VBox>
+    </HBox>
+    <HBox alignment="CENTER_RIGHT" spacing="5.0" VBox.vgrow="ALWAYS">
+        <Text fx:id="infoMessageTextField" text="Please Authenticate" HBox.hgrow="ALWAYS">
+            <HBox.margin>
+                <Insets>
+                    <right>30</right>
+                    <top>5</top>
+                    <bottom>5</bottom>
+                </Insets>
+            </HBox.margin>
+        </Text>
+    </HBox>
+</VBox>
