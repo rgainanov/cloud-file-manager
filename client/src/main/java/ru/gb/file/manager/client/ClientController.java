@@ -52,7 +52,7 @@ public class ClientController implements Initializable {
 
     // Sign/login
     public TextField loginField;
-    public TextField passwordField;
+    public PasswordField passwordField;
     public Button signInButton;
     public Button logInButton;
 
@@ -72,7 +72,7 @@ public class ClientController implements Initializable {
         clientDefaultParent = Paths.get("client");
         clientRoot = Paths.get("client", "CLIENT_STORAGE");
         initializeTableViews();
-        goToPath(clientRoot);
+        clientNavigateToPath(clientRoot);
         try {
             Socket socket = new Socket(HOST, PORT);
             os = new ObjectEncoderOutputStream(socket.getOutputStream());
@@ -105,12 +105,13 @@ public class ClientController implements Initializable {
                             if (tm.equals("/sign_error_creating_user")) {
                                 infoMessageTextField.setText("Error occurred. Please contact support.");
                             }
+                            if (tm.equals("/auth_ok")) {
+                                infoMessageTextField.setText("Successfully authenticated.");
+                                logInButton.setDisable(true);
+                                signInButton.setDisable(true);
+                            }
                         } else if (msg instanceof ServerFileList) {
-                            ServerFileList serverFileList = (ServerFileList) msg;
-                            serverFilesObservableList = FXCollections.observableArrayList(serverFileList.getList());
-                            serverPathField.setText(serverFileList.getServerPath());
-                            serverTableView.getItems().clear();
-                            serverTableView.setItems(serverFilesObservableList);
+                            serverFileListMessageHandler((ServerFileList) msg);
                         }
 
 
@@ -125,6 +126,13 @@ public class ClientController implements Initializable {
         } catch (Exception e) {
             log.error("", e);
         }
+    }
+
+    private void serverFileListMessageHandler(ServerFileList msg) {
+        serverFilesObservableList = FXCollections.observableArrayList(msg.getList());
+        serverPathField.setText(msg.getServerPath());
+        serverTableView.getItems().clear();
+        serverTableView.setItems(serverFilesObservableList);
     }
 
     public void menuItemDisconnectFromServer(ActionEvent actionEvent) {
@@ -200,7 +208,7 @@ public class ClientController implements Initializable {
         });
     }
 
-    public void goToPath(Path path) {
+    public void clientNavigateToPath(Path path) {
         clientRoot = path;
         clientFilesObservableList = FXCollections.observableArrayList(scanFiles(path));
         clientPathField.setText(clientRoot.toString());
@@ -228,12 +236,12 @@ public class ClientController implements Initializable {
             if (fileModel != null) {
                 if (fileModel.isDirectory()) {
                     Path pathTo = clientRoot.resolve(fileModel.getFileName());
-                    goToPath(pathTo);
+                    clientNavigateToPath(pathTo);
                 }
                 if (fileModel.isUpElement()) {
                     Path pathTo = clientRoot.getParent();
                     if (!pathTo.equals(clientDefaultParent)) {
-                        goToPath(pathTo);
+                        clientNavigateToPath(pathTo);
                     }
                 }
             }

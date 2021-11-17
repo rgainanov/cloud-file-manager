@@ -26,8 +26,8 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     private Path serverRoot;
     private Path clientDir;
 
-    public MainHandler(AuthProvider authProvider) {
-        this.authProvider = authProvider;
+    public MainHandler() {
+        this.authProvider = new DbAuthProvider();
         serverRoot = Paths.get("server", "SERVER_STORAGE");
     }
 
@@ -35,12 +35,14 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         log.debug("[ SERVER ]: Message received -> {}", msg.getClass().getName());
         if (msg instanceof User) {
+            authProvider.start();
             User u = (User) msg;
             if (u.isNewUser()) {
                 registerNewUser(u, ctx.channel());
             } else {
                 authUser(u, ctx.channel());
             }
+            authProvider.stop();
         }
     }
 
@@ -65,6 +67,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         if (!Files.exists(clientDir)) {
             Files.createDirectory(clientDir);
         }
+        c.writeAndFlush(new TextMessage("/auth_ok"));
         c.writeAndFlush(new ServerFileList(scanFile(), clientDir.toString()));
 
     }
@@ -91,7 +94,9 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
             if (!Files.exists(clientDir)) {
                 Files.createDirectory(clientDir);
             }
+            c.writeAndFlush(new TextMessage("/auth_ok"));
             c.writeAndFlush(new ServerFileList(scanFile(), clientDir.toString()));
+
         }
     }
 

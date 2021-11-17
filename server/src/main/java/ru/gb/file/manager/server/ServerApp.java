@@ -17,13 +17,10 @@ public class ServerApp {
 
     private static final int PORT = 8189;
 
-    private AuthProvider authProvider;
     public void run() {
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
 
-        authProvider = new DbAuthProvider();
-        authProvider.start();
         try {
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
@@ -34,7 +31,7 @@ public class ServerApp {
                             socketChannel.pipeline().addLast(
                                     new ObjectDecoder(ClassResolvers.cacheDisabled(null)),
                                     new ObjectEncoder(),
-                                    new MainHandler(authProvider)
+                                    new MainHandler()
                             );
                         }
                     });
@@ -44,7 +41,6 @@ public class ServerApp {
         } catch (Exception e) {
             log.error("", e);
         } finally {
-            authProvider.stop();
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
