@@ -20,10 +20,10 @@
       fx:controller="ru.gb.file.manager.client.ClientController" stylesheets="stylesheet.css">
     <MenuBar VBox.vgrow="ALWAYS">
         <Menu text="File">
-            <MenuItem text="Exit" onAction="#menuItemFileExitAction"/>
+            <MenuItem disable="true" text="Exit" onAction="#menuItemFileExitAction"/>
         </Menu>
         <Menu text="Server">
-            <MenuItem text="Disconnect" onAction="#menuItemDisconnectFromServer"/>
+            <MenuItem disable="true" text="Disconnect" onAction="#menuItemDisconnectFromServer"/>
         </Menu>
     </MenuBar>
     <VBox VBox.vgrow="ALWAYS">
@@ -70,23 +70,23 @@
                 </columns>
             </TableView>
             <HBox spacing="5.0" VBox.vgrow="ALWAYS">
-                <Button maxWidth="Infinity" mnemonicParsing="false" text="TOUCH" HBox.hgrow="ALWAYS">
+                <Button disable="true" maxWidth="Infinity" mnemonicParsing="false" text="TOUCH" HBox.hgrow="ALWAYS">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button maxWidth="Infinity" mnemonicParsing="false" text="MKDIR" HBox.hgrow="ALWAYS">
+                <Button disable="true" maxWidth="Infinity" mnemonicParsing="false" text="MKDIR" HBox.hgrow="ALWAYS">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button maxWidth="Infinity" mnemonicParsing="false" text="RM" HBox.hgrow="ALWAYS">
+                <Button disable="true" maxWidth="Infinity" mnemonicParsing="false" text="RM" HBox.hgrow="ALWAYS">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
                 <Button fx:id="uploadButtonBottom" disable="true" maxWidth="Infinity" mnemonicParsing="false"
-                        text="UPLOAD" HBox.hgrow="ALWAYS">
+                        text="UPLOAD" HBox.hgrow="ALWAYS" onAction="#serverUploadButtonAction">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
@@ -108,7 +108,7 @@
                 </padding>
             </Button>
             <Button fx:id="uploadButtonMiddle" disable="true" alignment="CENTER" mnemonicParsing="false"
-                    prefHeight="70.0" prefWidth="70.0" text="&gt;">
+                    prefHeight="70.0" prefWidth="70.0" text="&gt;" onAction="#serverUploadButtonAction">
                 <padding>
                     <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                 </padding>

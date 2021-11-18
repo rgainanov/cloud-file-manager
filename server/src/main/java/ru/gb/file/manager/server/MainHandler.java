@@ -54,7 +54,18 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         } else if (msg instanceof ClientRequestFile) {
             ClientRequestFile m = (ClientRequestFile) msg;
             sendFileToClient(m, ctx.channel());
+        } else if (msg instanceof ClientFileTransfer) {
+            ClientFileTransfer m = (ClientFileTransfer) msg;
+            receiveFileFromClient(m, ctx.channel());
         }
+    }
+
+    @SneakyThrows
+    private void receiveFileFromClient(ClientFileTransfer m, Channel c) {
+        Path filePath = Paths.get(m.getFilePath());
+        Files.write(filePath, m.getFile());
+        c.writeAndFlush(new ServerResponseFileList(scanFile(filePath.getParent()), filePath.getParent().toString()));
+        c.writeAndFlush(new ServerResponseTextMessage("/file_uploaded"));
     }
 
     @SneakyThrows

@@ -75,6 +75,7 @@ public class ClientController implements Initializable {
     private ObjectDecoderInputStream is;
 
     public void menuItemFileExitAction(ActionEvent actionEvent) {
+
     }
 
     @Override
@@ -126,13 +127,15 @@ public class ClientController implements Initializable {
                                 uploadButtonBottom.setDisable(false);
                                 serverCreateFileButton.setDisable(false);
                                 serverCreateDirectoryButton.setDisable(false);
-                                serverRemoveButton.setDisable(false);
                             }
                             if (tm.equals("/file_create_error")) {
                                 infoMessageTextField.setText("Error occurred. Cannot create file.");
                             }
                             if (tm.equals("/directory_create_error")) {
                                 infoMessageTextField.setText("Error occurred. Cannot create directory.");
+                            }
+                            if (tm.equals("/file_uploaded")) {
+                                infoMessageTextField.setText("File Uploaded Successfully.");
                             }
                         } else if (msg instanceof ServerResponseFileList) {
                             serverFileListMessageHandler((ServerResponseFileList) msg);
@@ -380,6 +383,33 @@ public class ClientController implements Initializable {
             }
         } else {
             infoMessageTextField.setText("Error occurred. Please select file to download.");
+        }
+    }
+
+    @SneakyThrows
+    public void serverUploadButtonAction(ActionEvent actionEvent) {
+        FileModel clientSelectedFileModel = clientTableView.getSelectionModel().getSelectedItem();
+        FileModel serverSelectedFileModel = serverTableView.getSelectionModel().getSelectedItem();
+        if (clientSelectedFileModel != null) {
+            if (!clientSelectedFileModel.isDirectory()) {
+                String fileName = clientSelectedFileModel.getFileName() + "." + clientSelectedFileModel.getFileExt();
+                Path filePath = clientRoot.resolve(fileName);
+                Path newServerFileDirectory = Paths.get(serverCurrentDir);
+                if (serverSelectedFileModel != null) {
+                    if (serverSelectedFileModel.isDirectory()) {
+                        newServerFileDirectory = newServerFileDirectory.resolve(serverSelectedFileModel.getFileName()).resolve(fileName);
+                    } else {
+                        infoMessageTextField.setText("Error occurred. Cannot upload into file.");
+                    }
+                } else {
+                    newServerFileDirectory = newServerFileDirectory.resolve(fileName);
+                }
+                byte[] file = Files.readAllBytes(filePath);
+                os.writeObject(new ClientFileTransfer(newServerFileDirectory.toString(), file));
+                os.flush();
+            } else {
+                infoMessageTextField.setText("Error occurred. Cannot upload directory.");
+            }
         }
     }
 }
