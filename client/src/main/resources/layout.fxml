@@ -14,9 +14,10 @@
 
 <?import javafx.scene.text.Text?>
 <?import javafx.scene.control.PasswordField?>
+
 <VBox alignment="CENTER" prefHeight="600.0" prefWidth="1200.0" style="-fx-font-family: 'Meslo LG L DZ for Powerline'"
-      xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1"
-      fx:controller="ru.gb.file.manager.client.ClientController">
+      xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml/1"
+      fx:controller="ru.gb.file.manager.client.ClientController" stylesheets="stylesheet.css">
     <MenuBar VBox.vgrow="ALWAYS">
         <Menu text="File">
             <MenuItem text="Exit" onAction="#menuItemFileExitAction"/>
@@ -60,7 +61,7 @@
             <TextField fx:id="clientPathField" VBox.vgrow="ALWAYS" focusTraversable="false"/>
             <TableView fx:id="clientTableView" VBox.vgrow="ALWAYS" onMouseClicked="#clientTableViewClickedItem">
                 <columns>
-                    <TableColumn fx:id="clientColumnFileName" prefWidth="250.0"
+                    <TableColumn fx:id="clientColumnFileName" prefWidth="230.0"
                                  resizable="false" text="File name"/>
                     <TableColumn fx:id="clientColumnFileExt" prefWidth="50.0" text="Ext"/>
                     <TableColumn fx:id="clientColumnFileLength" prefWidth="75.0" text="Size"/>
@@ -84,7 +85,8 @@
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button maxWidth="Infinity" mnemonicParsing="false" text="UPLOAD" HBox.hgrow="ALWAYS">
+                <Button fx:id="uploadButtonBottom" disable="true" maxWidth="Infinity" mnemonicParsing="false"
+                        text="UPLOAD" HBox.hgrow="ALWAYS">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
@@ -98,12 +100,15 @@
             </padding>
         </VBox>
         <VBox alignment="CENTER" spacing="5.0">
-            <Button alignment="CENTER" mnemonicParsing="false" prefHeight="70.0" prefWidth="70.0" text="&lt;">
+            <Button fx:id="downloadButtonMiddle" disable="true" alignment="CENTER" mnemonicParsing="false"
+                    prefHeight="70.0" prefWidth="70.0" text="&lt;"
+                    onAction="#serverDownloadButtonAction">
                 <padding>
                     <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                 </padding>
             </Button>
-            <Button alignment="CENTER" mnemonicParsing="false" prefHeight="70.0" prefWidth="70.0" text="&gt;">
+            <Button fx:id="uploadButtonMiddle" disable="true" alignment="CENTER" mnemonicParsing="false"
+                    prefHeight="70.0" prefWidth="70.0" text="&gt;">
                 <padding>
                     <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                 </padding>
@@ -116,32 +121,39 @@
             <TextField fx:id="serverPathField" VBox.vgrow="ALWAYS" promptText="Please Log In to see files on Server"/>
             <TableView fx:id="serverTableView" VBox.vgrow="ALWAYS" onMouseClicked="#serverTableViewClickedItem">
                 <columns>
-                    <TableColumn fx:id="serverColumnFileName" maxWidth="1.7976931348623157E308" prefWidth="250.0"
+                    <TableColumn fx:id="serverColumnFileName" prefWidth="230.0"
                                  resizable="false"
                                  text="File name"/>
                     <TableColumn fx:id="serverColumnFileExt" prefWidth="50.0" text="Ext"/>
                     <TableColumn fx:id="serverColumnFileLength" prefWidth="75.0" text="Size"/>
-                    <TableColumn fx:id="serverColumnFileModifyDate" maxWidth="1.7976931348623157E308" minWidth="150.0"
-                                 prefWidth="-1.0" text="Size"/>
+                    <TableColumn fx:id="serverColumnFileModifyDate" minWidth="180.0"
+                                 prefWidth="-1.0" text="Date Modified"/>
                 </columns>
             </TableView>
             <HBox spacing="5.0" VBox.vgrow="ALWAYS">
-                <Button maxWidth="Infinity" mnemonicParsing="false" text="TOUCH" HBox.hgrow="ALWAYS">
+                <Button fx:id="serverCreateFileButton" disable="true" maxWidth="Infinity" mnemonicParsing="false"
+                        text="TOUCH" HBox.hgrow="ALWAYS"
+                        onAction="#serverFileCreateButtonAction">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button maxWidth="Infinity" mnemonicParsing="false" text="MKDIR" HBox.hgrow="ALWAYS">
+                <Button fx:id="serverCreateDirectoryButton" disable="true" maxWidth="Infinity" mnemonicParsing="false"
+                        text="MKDIR" HBox.hgrow="ALWAYS"
+                        onAction="#serverDirectoryCreateButtonAction">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button maxWidth="Infinity" mnemonicParsing="false" text="RM" HBox.hgrow="ALWAYS">
+                <Button fx:id="serverRemoveButton" disable="true" maxWidth="Infinity" mnemonicParsing="false" text="RM"
+                        HBox.hgrow="ALWAYS">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button maxWidth="Infinity" mnemonicParsing="false" text="DOWNLOAD" HBox.hgrow="ALWAYS">
+                <Button fx:id="downloadButtonBottom" disable="true" maxWidth="Infinity" mnemonicParsing="false"
+                        text="DOWNLOAD" HBox.hgrow="ALWAYS"
+                        onAction="#serverDownloadButtonAction">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>

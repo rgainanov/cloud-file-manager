@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.ResourceBundle;
 import java.util.stream.Collectors;
 
@@ -41,6 +42,7 @@ public class ClientController implements Initializable {
     public TableColumn<FileModel, String> clientColumnFileModifyDate;
 
     // Server View Side
+    public String serverCurrentDir;
     public TextField serverPathField;
     public TableView<FileModel> serverTableView;
     public TableColumn<FileModel, String> serverColumnFileName;
@@ -56,6 +58,14 @@ public class ClientController implements Initializable {
     public Button signInButton;
     public Button logInButton;
 
+    public Button downloadButtonMiddle;
+    public Button downloadButtonBottom;
+    public Button uploadButtonMiddle;
+    public Button uploadButtonBottom;
+    public Button serverCreateFileButton;
+    public Button serverCreateDirectoryButton;
+    public Button serverRemoveButton;
+
     private Path clientRoot;
     private Path clientDefaultParent;
     private ObservableList<FileModel> clientFilesObservableList;
@@ -69,6 +79,7 @@ public class ClientController implements Initializable {
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
+
         clientDefaultParent = Paths.get("client");
         clientRoot = Paths.get("client", "CLIENT_STORAGE");
         initializeTableViews();
@@ -84,8 +95,8 @@ public class ClientController implements Initializable {
                         Message msg = (Message) is.readObject();
                         log.debug("[ CLIENT ]: Message Received -> {}", msg);
 
-                        if (msg instanceof TextMessage) {
-                            TextMessage textMessage = (TextMessage) msg;
+                        if (msg instanceof ServerResponseTextMessage) {
+                            ServerResponseTextMessage textMessage = (ServerResponseTextMessage) msg;
                             String tm = textMessage.getMsg();
 
                             if (tm.equals("/auth_error_non_existing_user")) {
@@ -109,9 +120,24 @@ public class ClientController implements Initializable {
                                 infoMessageTextField.setText("Successfully authenticated.");
                                 logInButton.setDisable(true);
                                 signInButton.setDisable(true);
+                                downloadButtonMiddle.setDisable(false);
+                                downloadButtonBottom.setDisable(false);
+                                uploadButtonMiddle.setDisable(false);
+                                uploadButtonBottom.setDisable(false);
+                                serverCreateFileButton.setDisable(false);
+                                serverCreateDirectoryButton.setDisable(false);
+                                serverRemoveButton.setDisable(false);
                             }
-                        } else if (msg instanceof ServerFileList) {
-                            serverFileListMessageHandler((ServerFileList) msg);
+                            if (tm.equals("/file_create_error")) {
+                                infoMessageTextField.setText("Error occurred. Cannot create file.");
+                            }
+                            if (tm.equals("/directory_create_error")) {
+                                infoMessageTextField.setText("Error occurred. Cannot create directory.");
+                            }
+                        } else if (msg instanceof ServerResponseFileList) {
+                            serverFileListMessageHandler((ServerResponseFileList) msg);
+                        } else if (msg instanceof ServerResponseFile) {
+                            serverFileReceiver((ServerResponseFile) msg);
                         }
 
 
@@ -125,18 +151,39 @@ public class ClientController implements Initializable {
             log.debug("[ CLIENT ]: Started ...");
         } catch (Exception e) {
             log.error("", e);
+
         }
     }
 
-    private void serverFileListMessageHandler(ServerFileList msg) {
+    @SneakyThrows
+    private void serverFileReceiver(ServerResponseFile msg) {
+        FileModel fileModel = clientTableView.getSelectionModel().getSelectedItem();
+        if (fileModel == null) {
+            Path filePath = clientRoot.resolve(msg.getFileName());
+            Files.write(filePath, msg.getFile());
+            clientNavigateToPath(clientRoot);
+            infoMessageTextField.setText("File Downloaded Successfully.");
+        }
+        if (fileModel != null && fileModel.isDirectory()) {
+            Path filePath = clientRoot.resolve(fileModel.getFileName()).resolve(msg.getFileName());
+            Files.write(filePath, msg.getFile());
+            clientNavigateToPath(filePath.getParent());
+            infoMessageTextField.setText("File Downloaded Successfully.");
+        } else {
+            infoMessageTextField.setText("Error occurred. Cannot download file into file.");
+        }
+    }
+
+    private void serverFileListMessageHandler(ServerResponseFileList msg) {
         serverFilesObservableList = FXCollections.observableArrayList(msg.getList());
-        serverPathField.setText(msg.getServerPath());
+        serverCurrentDir = msg.getServerPath();
+        serverPathField.setText(serverCurrentDir);
         serverTableView.getItems().clear();
         serverTableView.setItems(serverFilesObservableList);
+        infoMessageTextField.setText("Server file list updated");
     }
 
     public void menuItemDisconnectFromServer(ActionEvent actionEvent) {
-
     }
 
     @SneakyThrows
@@ -248,7 +295,91 @@ public class ClientController implements Initializable {
         }
     }
 
+    @SneakyThrows
     public void serverTableViewClickedItem(MouseEvent mouseEvent) {
+        if (mouseEvent.getClickCount() == 2) {
+            FileModel fileModel = serverTableView.getSelectionModel().getSelectedItem();
+            if (fileModel != null) {
+                if (fileModel.isDirectory()) {
+                    os.writeObject(new ClientRequestGoIn(serverCurrentDir, fileModel.getFileName()));
+                }
+                if (fileModel.isUpElement()) {
+                    os.writeObject(new ClientRequestGoUp(serverCurrentDir));
+                }
+                os.flush();
+            }
+        }
+    }
 
+    @SneakyThrows
+    public void serverFileCreateButtonAction(ActionEvent actionEvent) {
+        // ToDo Replace strings with Paths
+        TextInputDialog dialog = new TextInputDialog();
+        DialogPane dialogPane = dialog.getDialogPane();
+        dialogPane.getStylesheets().add(getClass().getResource("/stylesheet.css").toExternalForm());
+        dialogPane.getStyleClass().add("dialog");
+        dialog.setTitle("Cloud File Manager");
+        dialog.setHeaderText("Create File dialog");
+        dialog.setContentText("Enter File name : ");
+        Optional<String> result = dialog.showAndWait();
+        if (result.isPresent()) {
+            FileModel serverSelectedFileModel = serverTableView.getSelectionModel().getSelectedItem();
+            if (serverSelectedFileModel != null) {
+                Path p = Paths.get(serverCurrentDir, serverSelectedFileModel.getFileName());
+                os.writeObject(new ClientRequestFileCreate(result.get().trim(), p.toString()));
+            } else {
+                os.writeObject(new ClientRequestFileCreate(result.get().trim(), serverCurrentDir));
+            }
+            os.flush();
+            log.debug("[ CLIENT ]: Request for file creation sent to Server, file name -> {}.", result.get());
+        }
+    }
+
+    @SneakyThrows
+    public void serverDirectoryCreateButtonAction(ActionEvent actionEvent) {
+        // ToDo Replace strings with Paths
+        TextInputDialog dialog = new TextInputDialog();
+        DialogPane dialogPane = dialog.getDialogPane();
+        dialogPane.getStylesheets().add(getClass().getResource("/stylesheet.css").toExternalForm());
+        dialogPane.getStyleClass().add("dialog");
+        dialog.setTitle("Cloud File Manager");
+        dialog.setHeaderText("Create Directory dialog");
+        dialog.setContentText("Enter Directory name : ");
+        Optional<String> result = dialog.showAndWait();
+        if (result.isPresent()) {
+            FileModel serverSelectedFileModel = serverTableView.getSelectionModel().getSelectedItem();
+            if (serverSelectedFileModel != null) {
+                if (serverSelectedFileModel.isDirectory()) {
+                    Path p = Paths.get(serverCurrentDir, serverSelectedFileModel.getFileName(), result.get().trim());
+                    os.writeObject(new ClientRequestDirectoryCreate(p.toString()));
+                } else {
+                    infoMessageTextField.setText("Error occurred. Please select directory.");
+                }
+            } else {
+                Path p = Paths.get(serverCurrentDir, result.get().trim());
+                os.writeObject(new ClientRequestDirectoryCreate(p.toString()));
+            }
+            os.flush();
+            log.debug("[ CLIENT ]: Request for directory creation sent to Server, directory name -> {}.", result.get());
+        }
+    }
+
+    @SneakyThrows
+    public void serverDownloadButtonAction(ActionEvent actionEvent) {
+        FileModel serverSelectedFileModel = serverTableView.getSelectionModel().getSelectedItem();
+        if (serverSelectedFileModel != null) {
+            if (!serverSelectedFileModel.isDirectory()) {
+                Path p = Paths.get(
+                        serverCurrentDir,
+                        (serverSelectedFileModel.getFileName() + "." + serverSelectedFileModel.getFileExt())
+                );
+                os.writeObject(new ClientRequestFile(p));
+                os.flush();
+            } else {
+                infoMessageTextField.setText("Error occurred. Cannot download directory.");
+            }
+        } else {
+            infoMessageTextField.setText("Error occurred. Please select file to download.");
+        }
     }
 }
