@@ -5,11 +5,11 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-public class ServerFileList extends Message{
+public class ServerResponseFileList extends Message{
     private String serverPath;
     private List<FileModel> list;
 
-    public ServerFileList(List<FileModel> list, String serverPath) {
+    public ServerResponseFileList(List<FileModel> list, String serverPath) {
         this.list = list;
         this.serverPath = serverPath;
     }
