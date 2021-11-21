@@ -2,6 +2,7 @@ package ru.gb.file.manager.client;
 
 import io.netty.handler.codec.serialization.ObjectDecoderInputStream;
 import io.netty.handler.codec.serialization.ObjectEncoderOutputStream;
+import javafx.application.Platform;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
@@ -15,6 +16,7 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import ru.gb.file.manager.core.*;
 
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.URL;
@@ -65,6 +67,7 @@ public class ClientController implements Initializable {
     public Button serverCreateFileButton;
     public Button serverCreateDirectoryButton;
     public Button serverRemoveButton;
+    public ProgressBar progressBar;
 
     private Path clientRoot;
     private Path clientDefaultParent;
@@ -80,7 +83,6 @@ public class ClientController implements Initializable {
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
-
         clientDefaultParent = Paths.get("client");
         clientRoot = Paths.get("client", "CLIENT_STORAGE");
         initializeTableViews();
@@ -160,20 +162,70 @@ public class ClientController implements Initializable {
         }
     }
 
+    private boolean receiveFile(ServerResponseFile msg, Path filePath) {
+        log.debug("[ CLIENT ]: Receiving file -> {}", msg.getFileName());
+        try (FileOutputStream fos = new FileOutputStream(filePath.toFile())) {
+            while (true) {
+                fos.write(msg.getFilePart(), 0, msg.getBatchLength());
+                infoMessageTextField.setText("Receiving file " + msg.getFileName());
+
+                double progress = (1.0 * msg.getCurrentBatch()) / msg.getBatchCount();
+
+                Platform.runLater(() -> {
+                    progressBar.setProgress(progress);
+                });
+
+//                infoMessageTextField.setText("Receiving file " + msg.getFileName() +
+//                        " part " + msg.getCurrentBatch() + "/" + msg.getBatchCount() + ".");
+                log.debug(
+                        "[ CLIENT ]: Receiving file -> {}, {}/{} - {}",
+                        msg.getFileName(),
+                        msg.getCurrentBatch(),
+                        msg.getBatchCount(),
+                        progress
+                );
+                if (msg.getBatchCount() == msg.getCurrentBatch()) {
+                    break;
+                }
+                msg = (ServerResponseFile) is.readObject();
+            }
+            return true;
+        } catch (Exception e) {
+            log.error("", e);
+            return false;
+        }
+    }
+
     @SneakyThrows
     private void serverFileReceiver(ServerResponseFile msg) {
         FileModel fileModel = clientTableView.getSelectionModel().getSelectedItem();
+        progressBar.setVisible(true);
+        progressBar.setManaged(true);
         if (fileModel == null) {
             Path filePath = clientRoot.resolve(msg.getFileName());
-            Files.write(filePath, msg.getFile());
-            clientNavigateToPath(clientRoot);
-            infoMessageTextField.setText("File Downloaded Successfully.");
+            boolean isFileReceived = receiveFile(msg, filePath);
+            if (isFileReceived) {
+                clientNavigateToPath(clientRoot);
+                infoMessageTextField.setText("File Downloaded Successfully.");
+            } else {
+                infoMessageTextField.setText("Error occurred. File has not been downloaded");
+            }
+//            Files.write(filePath, msg.getFilePart());
+//            clientNavigateToPath(clientRoot);
+//            infoMessageTextField.setText("File Downloaded Successfully.");
         }
         if (fileModel != null && fileModel.isDirectory()) {
             Path filePath = clientRoot.resolve(fileModel.getFileName()).resolve(msg.getFileName());
-            Files.write(filePath, msg.getFile());
-            clientNavigateToPath(filePath.getParent());
-            infoMessageTextField.setText("File Downloaded Successfully.");
+//            Files.write(filePath, msg.getFilePart());
+//            clientNavigateToPath(filePath.getParent());
+//            infoMessageTextField.setText("File Downloaded Successfully.");
+            boolean isFileReceived = receiveFile(msg, filePath);
+            if (isFileReceived) {
+                clientNavigateToPath(clientRoot);
+                infoMessageTextField.setText("File Downloaded Successfully.");
+            } else {
+                infoMessageTextField.setText("Error occurred. File has not been downloaded");
+            }
         } else {
             infoMessageTextField.setText("Error occurred. Cannot download file into file.");
         }

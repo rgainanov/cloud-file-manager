@@ -15,6 +15,7 @@
 <?import javafx.scene.text.Text?>
 <?import javafx.scene.control.PasswordField?>
 
+<?import javafx.scene.control.ProgressBar?>
 <VBox alignment="CENTER" prefHeight="600.0" prefWidth="1200.0" style="-fx-font-family: 'Meslo LG L DZ for Powerline'"
       xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml/1"
       fx:controller="ru.gb.file.manager.client.ClientController" stylesheets="stylesheet.css">
@@ -177,5 +178,10 @@
                 </Insets>
             </HBox.margin>
         </Text>
+        <ProgressBar fx:id="progressBar" progress="0.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+            <padding>
+                <Insets bottom="5.0" left="10.0" right="10.0" top="5.0"/>
+            </padding>
+        </ProgressBar>
     </HBox>
 </VBox>

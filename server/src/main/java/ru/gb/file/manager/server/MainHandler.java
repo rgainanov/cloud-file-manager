@@ -2,11 +2,13 @@ package ru.gb.file.manager.server;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import ru.gb.file.manager.core.*;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,26 +18,29 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class MainHandler extends ChannelInboundHandlerAdapter {
+public class MainHandler extends SimpleChannelInboundHandler<Message> {
+
+    private static final int BUFFER_SIZE = 8 * 1024;
 
     private AuthProvider authProvider;
     private Path serverRoot;
     private Path clientDir;
 
+    private byte[] buf;
+
     public MainHandler(AuthProvider authProvider) {
         this.authProvider = authProvider;
-        serverRoot = Paths.get("server", "SERVER_STORAGE");
+        this.buf = new byte[BUFFER_SIZE];
+        this.serverRoot = Paths.get("server", "SERVER_STORAGE");
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    public void channelRead0(ChannelHandlerContext ctx, Message msg) throws Exception {
         log.debug("[ SERVER ]: Message received -> {}", msg.getClass().getName());
 
-        Message message = (Message) msg;
-
-        switch (message.getType()) {
+        switch (msg.getType()) {
             case AUTH_REQUEST:
-                ClientRequestAuthUser u = (ClientRequestAuthUser) message;
+                ClientRequestAuthUser u = (ClientRequestAuthUser) msg;
                 if (u.isNewUser()) {
                     registerNewUser(u, ctx.channel());
                 } else {
@@ -43,54 +48,26 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
                 }
                 break;
             case CLIENT_FILE_REQUEST:
-                sendFileToClient((ClientRequestFile) message, ctx.channel());
+                sendFileToClient((ClientRequestFile) msg, ctx.channel());
                 break;
             case CLIENT_REQUEST_FILE_DELETE:
                 break;
             case CLIENT_REQUEST_MKDIR:
-                createNewDirectory((ClientRequestDirectoryCreate) message, ctx.channel());
+                createNewDirectory((ClientRequestDirectoryCreate) msg, ctx.channel());
                 break;
             case CLIENT_REQUEST_TOUCH:
-                createNewFile((ClientRequestFileCreate) message, ctx.channel());
+                createNewFile((ClientRequestFileCreate) msg, ctx.channel());
                 break;
             case CLIENT_REQUEST_PATH_GO_IN:
-                goToPath((ClientRequestGoIn) message, ctx.channel());
+                goToPath((ClientRequestGoIn) msg, ctx.channel());
                 break;
             case CLIENT_REQUEST_PATH_GO_UP:
-                goToPathUp((ClientRequestGoUp) message, ctx.channel());
+                goToPathUp((ClientRequestGoUp) msg, ctx.channel());
                 break;
             case CLIENT_FILE_TRANSFER:
-                receiveFileFromClient((ClientFileTransfer) message, ctx.channel());
+                receiveFileFromClient((ClientFileTransfer) msg, ctx.channel());
                 break;
-
         }
-
-//        if (msg instanceof User) {
-//            User u = (User) msg;
-//            if (u.isNewUser()) {
-//                registerNewUser(u, ctx.channel());
-//            } else {
-//                authUser(u, ctx.channel());
-//            }
-//        } else if (msg instanceof ClientRequestFileCreate) {
-//            ClientRequestFileCreate m = (ClientRequestFileCreate) msg;
-//            createNewFile(m, ctx.channel());
-//        } else if (msg instanceof ClientRequestGoIn) {
-//            ClientRequestGoIn m = (ClientRequestGoIn) msg;
-//            goToPath(m.getCurrentDir(), m.getFileName(), ctx.channel());
-//        } else if (msg instanceof ClientRequestGoUp) {
-//            ClientRequestGoUp m = (ClientRequestGoUp) msg;
-//            goToPathUp(m.getCurrentDir(), ctx.channel());
-//        } else if (msg instanceof ClientRequestDirectoryCreate) {
-//            ClientRequestDirectoryCreate m = (ClientRequestDirectoryCreate) msg;
-//            createNewDirectory(m, ctx.channel());
-//        } else if (msg instanceof ClientRequestFile) {
-//            ClientRequestFile m = (ClientRequestFile) msg;
-//            sendFileToClient(m, ctx.channel());
-//        } else if (msg instanceof ClientFileTransfer) {
-//            ClientFileTransfer m = (ClientFileTransfer) msg;
-//            receiveFileFromClient(m, ctx.channel());
-//        }
     }
 
     @SneakyThrows
@@ -105,8 +82,23 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     private void sendFileToClient(ClientRequestFile m, Channel c) {
         Path filePath = Paths.get(m.getFilePath());
         String fileName = filePath.getFileName().toString();
-        byte[] file = Files.readAllBytes(filePath);
-        c.writeAndFlush(new ServerResponseFile(fileName, file));
+        File file = filePath.toFile();
+
+        long fileLength = file.length();
+        long batchCount = (fileLength + BUFFER_SIZE - 1) / BUFFER_SIZE;
+        int currentBatch = 1;
+
+        try (FileInputStream fis = new FileInputStream(file)) {
+            while (fis.available() > 0) {
+                int read = fis.read(buf);
+                c.writeAndFlush(new ServerResponseFile(fileName, batchCount, currentBatch, read, buf));
+                currentBatch++;
+                log.info("[ SERVER ]: File -> {}, part {}/{} sent.", fileName, currentBatch, batchCount);
+            }
+        }
+//        c.flush();
+        log.info("[ SERVER ]: File -> {}, transfer finished.", fileName);
+
     }
 
     @SneakyThrows

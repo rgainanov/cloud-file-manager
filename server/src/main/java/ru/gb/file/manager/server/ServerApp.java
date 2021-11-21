@@ -16,11 +16,12 @@ import lombok.extern.slf4j.Slf4j;
 public class ServerApp {
 
     private static final int PORT = 8189;
-    private final AuthProvider authProvider = new DbAuthProvider();
+    private AuthProvider authProvider;
 
     public void run() {
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
+        authProvider = new DbAuthProvider();
 
         try {
             authProvider.start();
