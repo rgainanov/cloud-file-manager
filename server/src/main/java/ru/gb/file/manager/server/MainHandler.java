@@ -22,42 +22,75 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     private Path serverRoot;
     private Path clientDir;
 
-    public MainHandler() {
-        this.authProvider = new DbAuthProvider();
+    public MainHandler(AuthProvider authProvider) {
+        this.authProvider = authProvider;
         serverRoot = Paths.get("server", "SERVER_STORAGE");
     }
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         log.debug("[ SERVER ]: Message received -> {}", msg.getClass().getName());
-        if (msg instanceof User) {
-            authProvider.start();
-            User u = (User) msg;
-            if (u.isNewUser()) {
-                registerNewUser(u, ctx.channel());
-            } else {
-                authUser(u, ctx.channel());
-            }
-            authProvider.stop();
-        } else if (msg instanceof ClientRequestFileCreate) {
-            ClientRequestFileCreate m = (ClientRequestFileCreate) msg;
-            createNewFile(m, ctx.channel());
-        } else if (msg instanceof ClientRequestGoIn) {
-            ClientRequestGoIn m = (ClientRequestGoIn) msg;
-            goToPath(m.getCurrentDir(), m.getFileName(), ctx.channel());
-        } else if (msg instanceof ClientRequestGoUp) {
-            ClientRequestGoUp m = (ClientRequestGoUp) msg;
-            goToPathUp(m.getCurrentDir(), ctx.channel());
-        } else if (msg instanceof ClientRequestDirectoryCreate) {
-            ClientRequestDirectoryCreate m = (ClientRequestDirectoryCreate) msg;
-            createNewDirectory(m, ctx.channel());
-        } else if (msg instanceof ClientRequestFile) {
-            ClientRequestFile m = (ClientRequestFile) msg;
-            sendFileToClient(m, ctx.channel());
-        } else if (msg instanceof ClientFileTransfer) {
-            ClientFileTransfer m = (ClientFileTransfer) msg;
-            receiveFileFromClient(m, ctx.channel());
+
+        Message message = (Message) msg;
+
+        switch (message.getType()) {
+            case AUTH_REQUEST:
+                ClientRequestAuthUser u = (ClientRequestAuthUser) message;
+                if (u.isNewUser()) {
+                    registerNewUser(u, ctx.channel());
+                } else {
+                    authUser(u, ctx.channel());
+                }
+                break;
+            case CLIENT_FILE_REQUEST:
+                sendFileToClient((ClientRequestFile) message, ctx.channel());
+                break;
+            case CLIENT_REQUEST_FILE_DELETE:
+                break;
+            case CLIENT_REQUEST_MKDIR:
+                createNewDirectory((ClientRequestDirectoryCreate) message, ctx.channel());
+                break;
+            case CLIENT_REQUEST_TOUCH:
+                createNewFile((ClientRequestFileCreate) message, ctx.channel());
+                break;
+            case CLIENT_REQUEST_PATH_GO_IN:
+                goToPath((ClientRequestGoIn) message, ctx.channel());
+                break;
+            case CLIENT_REQUEST_PATH_GO_UP:
+                goToPathUp((ClientRequestGoUp) message, ctx.channel());
+                break;
+            case CLIENT_FILE_TRANSFER:
+                receiveFileFromClient((ClientFileTransfer) message, ctx.channel());
+                break;
+
         }
+
+//        if (msg instanceof User) {
+//            User u = (User) msg;
+//            if (u.isNewUser()) {
+//                registerNewUser(u, ctx.channel());
+//            } else {
+//                authUser(u, ctx.channel());
+//            }
+//        } else if (msg instanceof ClientRequestFileCreate) {
+//            ClientRequestFileCreate m = (ClientRequestFileCreate) msg;
+//            createNewFile(m, ctx.channel());
+//        } else if (msg instanceof ClientRequestGoIn) {
+//            ClientRequestGoIn m = (ClientRequestGoIn) msg;
+//            goToPath(m.getCurrentDir(), m.getFileName(), ctx.channel());
+//        } else if (msg instanceof ClientRequestGoUp) {
+//            ClientRequestGoUp m = (ClientRequestGoUp) msg;
+//            goToPathUp(m.getCurrentDir(), ctx.channel());
+//        } else if (msg instanceof ClientRequestDirectoryCreate) {
+//            ClientRequestDirectoryCreate m = (ClientRequestDirectoryCreate) msg;
+//            createNewDirectory(m, ctx.channel());
+//        } else if (msg instanceof ClientRequestFile) {
+//            ClientRequestFile m = (ClientRequestFile) msg;
+//            sendFileToClient(m, ctx.channel());
+//        } else if (msg instanceof ClientFileTransfer) {
+//            ClientFileTransfer m = (ClientFileTransfer) msg;
+//            receiveFileFromClient(m, ctx.channel());
+//        }
     }
 
     @SneakyThrows
@@ -87,16 +120,16 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private void goToPathUp(String currentDir, Channel c) {
-        Path serverCurrentDir = Paths.get(currentDir);
+    private void goToPathUp(ClientRequestGoUp clientRequestGoUp, Channel c) {
+        Path serverCurrentDir = Paths.get(clientRequestGoUp.getCurrentDir());
         if (!serverCurrentDir.equals(clientDir)) {
             Path newPath = serverCurrentDir.getParent();
             c.writeAndFlush(new ServerResponseFileList(scanFile(newPath), newPath.toString()));
         }
     }
 
-    private void goToPath(String currentDir, String fileName, Channel c) {
-        Path newPath = Paths.get(currentDir, fileName);
+    private void goToPath(ClientRequestGoIn clientRequestGoIn, Channel c) {
+        Path newPath = Paths.get(clientRequestGoIn.getCurrentDir(), clientRequestGoIn.getFileName());
         c.writeAndFlush(new ServerResponseFileList(scanFile(newPath), newPath.toString()));
     }
 
@@ -112,7 +145,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     }
 
     @SneakyThrows
-    private void authUser(User u, Channel c) {
+    private void authUser(ClientRequestAuthUser u, Channel c) {
         String authLogin = u.getLogin();
         String authPass = u.getPassword();
         String[] selectUser = authProvider.getUsers(u.getLogin());
@@ -138,7 +171,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     }
 
     @SneakyThrows
-    private void registerNewUser(User u, Channel c) {
+    private void registerNewUser(ClientRequestAuthUser u, Channel c) {
         String authLogin = u.getLogin();
         String authPass = u.getPassword();
         String[] selectUser = authProvider.getUsers(u.getLogin());

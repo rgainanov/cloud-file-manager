@@ -96,54 +96,17 @@ public class ClientController implements Initializable {
                         Message msg = (Message) is.readObject();
                         log.debug("[ CLIENT ]: Message Received -> {}", msg);
 
-                        if (msg instanceof ServerResponseTextMessage) {
-                            ServerResponseTextMessage textMessage = (ServerResponseTextMessage) msg;
-                            String tm = textMessage.getMsg();
-
-                            if (tm.equals("/auth_error_non_existing_user")) {
-                                infoMessageTextField.setText("Error occurred. No such user. Please Sign In.");
-                                signInButton.setManaged(true);
-                                signInButton.setVisible(true);
-                                continue;
-                            }
-                            if (tm.equals("/auth_error_incorrect_pass")) {
-                                infoMessageTextField.setText("Error occurred. Login or Password is incorrect.");
-                                continue;
-                            }
-                            if (tm.equals("/sign_user_exists")) {
-                                infoMessageTextField.setText("Error occurred. User with this login already exists.");
-                                continue;
-                            }
-                            if (tm.equals("/sign_error_creating_user")) {
-                                infoMessageTextField.setText("Error occurred. Please contact support.");
-                            }
-                            if (tm.equals("/auth_ok")) {
-                                infoMessageTextField.setText("Successfully authenticated.");
-                                logInButton.setDisable(true);
-                                signInButton.setDisable(true);
-                                downloadButtonMiddle.setDisable(false);
-                                downloadButtonBottom.setDisable(false);
-                                uploadButtonMiddle.setDisable(false);
-                                uploadButtonBottom.setDisable(false);
-                                serverCreateFileButton.setDisable(false);
-                                serverCreateDirectoryButton.setDisable(false);
-                            }
-                            if (tm.equals("/file_create_error")) {
-                                infoMessageTextField.setText("Error occurred. Cannot create file.");
-                            }
-                            if (tm.equals("/directory_create_error")) {
-                                infoMessageTextField.setText("Error occurred. Cannot create directory.");
-                            }
-                            if (tm.equals("/file_uploaded")) {
-                                infoMessageTextField.setText("File Uploaded Successfully.");
-                            }
-                        } else if (msg instanceof ServerResponseFileList) {
-                            serverFileListMessageHandler((ServerResponseFileList) msg);
-                        } else if (msg instanceof ServerResponseFile) {
-                            serverFileReceiver((ServerResponseFile) msg);
+                        switch (msg.getType()) {
+                            case SERVER_RESPONSE_TXT_MESSAGE:
+                                serverTextMessageHandler((ServerResponseTextMessage) msg);
+                                break;
+                            case SERVER_RESPONSE_FILE_LIST:
+                                serverFileListMessageHandler((ServerResponseFileList) msg);
+                                break;
+                            case SERVER_RESPONSE_FILE:
+                                serverFileReceiver((ServerResponseFile) msg);
+                                break;
                         }
-
-
                     } catch (ClassNotFoundException | IOException e) {
                         e.printStackTrace();
                     }
@@ -155,6 +118,45 @@ public class ClientController implements Initializable {
         } catch (Exception e) {
             log.error("", e);
 
+        }
+    }
+
+    private void serverTextMessageHandler(ServerResponseTextMessage textMessage) {
+        String tm = textMessage.getMsg();
+
+        if (tm.equals("/auth_error_non_existing_user")) {
+            infoMessageTextField.setText("Error occurred. No such user. Please Sign In.");
+            signInButton.setManaged(true);
+            signInButton.setVisible(true);
+        }
+        if (tm.equals("/auth_error_incorrect_pass")) {
+            infoMessageTextField.setText("Error occurred. Login or Password is incorrect.");
+        }
+        if (tm.equals("/sign_user_exists")) {
+            infoMessageTextField.setText("Error occurred. User with this login already exists.");
+        }
+        if (tm.equals("/sign_error_creating_user")) {
+            infoMessageTextField.setText("Error occurred. Please contact support.");
+        }
+        if (tm.equals("/auth_ok")) {
+            infoMessageTextField.setText("Successfully authenticated.");
+            logInButton.setDisable(true);
+            signInButton.setDisable(true);
+            downloadButtonMiddle.setDisable(false);
+            downloadButtonBottom.setDisable(false);
+            uploadButtonMiddle.setDisable(false);
+            uploadButtonBottom.setDisable(false);
+            serverCreateFileButton.setDisable(false);
+            serverCreateDirectoryButton.setDisable(false);
+        }
+        if (tm.equals("/file_create_error")) {
+            infoMessageTextField.setText("Error occurred. Cannot create file.");
+        }
+        if (tm.equals("/directory_create_error")) {
+            infoMessageTextField.setText("Error occurred. Cannot create directory.");
+        }
+        if (tm.equals("/file_uploaded")) {
+            infoMessageTextField.setText("File Uploaded Successfully.");
         }
     }
 
@@ -191,7 +193,7 @@ public class ClientController implements Initializable {
 
     @SneakyThrows
     public void signInButtonAction(ActionEvent actionEvent) {
-        User user = new User(loginField.getText(), passwordField.getText(), true);
+        ClientRequestAuthUser user = new ClientRequestAuthUser(loginField.getText(), passwordField.getText(), true);
         os.writeObject(user);
         os.flush();
 
@@ -199,7 +201,7 @@ public class ClientController implements Initializable {
 
     @SneakyThrows
     public void logInButtonAction(ActionEvent actionEvent) {
-        User user = new User(loginField.getText(), passwordField.getText());
+        ClientRequestAuthUser user = new ClientRequestAuthUser(loginField.getText(), passwordField.getText());
         os.writeObject(user);
         os.flush();
     }
