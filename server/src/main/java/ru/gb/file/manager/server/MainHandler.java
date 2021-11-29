@@ -2,78 +2,160 @@ package ru.gb.file.manager.server;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import ru.gb.file.manager.core.*;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class MainHandler extends ChannelInboundHandlerAdapter {
+public class MainHandler extends SimpleChannelInboundHandler<Message> {
+
+    private static final int BUFFER_SIZE = 8 * 1024;
 
     private AuthProvider authProvider;
     private Path serverRoot;
     private Path clientDir;
 
-    public MainHandler() {
-        this.authProvider = new DbAuthProvider();
-        serverRoot = Paths.get("server", "SERVER_STORAGE");
+    private OutputStream fos;
+    private byte[] buf;
+
+    public MainHandler(AuthProvider authProvider) {
+        this.authProvider = authProvider;
+        this.buf = new byte[BUFFER_SIZE];
+        this.serverRoot = Paths.get("server", "SERVER_STORAGE");
     }
 
     @Override
-    public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        log.debug("[ SERVER ]: Message received -> {}", msg.getClass().getName());
-        if (msg instanceof User) {
-            authProvider.start();
-            User u = (User) msg;
-            if (u.isNewUser()) {
-                registerNewUser(u, ctx.channel());
-            } else {
-                authUser(u, ctx.channel());
-            }
-            authProvider.stop();
-        } else if (msg instanceof ClientRequestFileCreate) {
-            ClientRequestFileCreate m = (ClientRequestFileCreate) msg;
-            createNewFile(m, ctx.channel());
-        } else if (msg instanceof ClientRequestGoIn) {
-            ClientRequestGoIn m = (ClientRequestGoIn) msg;
-            goToPath(m.getCurrentDir(), m.getFileName(), ctx.channel());
-        } else if (msg instanceof ClientRequestGoUp) {
-            ClientRequestGoUp m = (ClientRequestGoUp) msg;
-            goToPathUp(m.getCurrentDir(), ctx.channel());
-        } else if (msg instanceof ClientRequestDirectoryCreate) {
-            ClientRequestDirectoryCreate m = (ClientRequestDirectoryCreate) msg;
-            createNewDirectory(m, ctx.channel());
-        } else if (msg instanceof ClientRequestFile) {
-            ClientRequestFile m = (ClientRequestFile) msg;
-            sendFileToClient(m, ctx.channel());
-        } else if (msg instanceof ClientFileTransfer) {
-            ClientFileTransfer m = (ClientFileTransfer) msg;
-            receiveFileFromClient(m, ctx.channel());
+    public void channelRead0(ChannelHandlerContext ctx, Message msg) throws Exception {
+        switch (msg.getType()) {
+            case AUTH_REQUEST:
+                ClientRequestAuthUser u = (ClientRequestAuthUser) msg;
+                if (u.isNewUser()) {
+                    registerNewUser(u, ctx.channel());
+                } else {
+                    authUser(u, ctx.channel());
+                }
+                break;
+            case CLIENT_FILE_REQUEST:
+                sendFileToClient((ClientRequestFile) msg, ctx.channel());
+                break;
+            case CLIENT_REQUEST_FILE_DELETE:
+                break;
+            case CLIENT_REQUEST_MKDIR:
+                createNewDirectory((ClientRequestDirectoryCreate) msg, ctx.channel());
+                break;
+            case CLIENT_REQUEST_TOUCH:
+                createNewFile((ClientRequestFileCreate) msg, ctx.channel());
+                break;
+            case CLIENT_REQUEST_RENAME:
+                rename((ClientRequestRename) msg, ctx.channel());
+                break;
+            case CLIENT_REQUEST_PATH_GO_IN:
+                goToPath((ClientRequestGoIn) msg, ctx.channel());
+                break;
+            case CLIENT_REQUEST_PATH_GO_UP:
+                goToPathUp((ClientRequestGoUp) msg, ctx.channel());
+                break;
+            case FILE_TRANSFER:
+                receiveFileFromClient((FileTransfer) msg, ctx.channel());
+                break;
+            case CLIENT_REQUEST_DELETE:
+                deletePath((ClientRequestDelete) msg, ctx.channel());
+                break;
         }
     }
 
     @SneakyThrows
-    private void receiveFileFromClient(ClientFileTransfer m, Channel c) {
+    private void rename(ClientRequestRename msg, Channel c) {
+        Path currentPath = Paths.get(msg.getCurrentPath());
+        Path newPath = Paths.get(msg.getNewPath());
+
+        if (Files.isDirectory(currentPath)) {
+            String newName = newPath.getFileName().toString();
+            log.debug("[ SERVER ]: Request to rename directory -> {}, new name -> {}",
+                    currentPath.getFileName(), newName);
+
+            Files.move(currentPath, currentPath.resolveSibling(newName));
+            c.writeAndFlush(new ServerResponseFileList(scanFile(newPath.getParent()), newPath.getParent().toString()));
+            c.writeAndFlush(new ServerResponseTextMessage("/directory_renamed"));
+        } else {
+            log.debug("[ SERVER ]: Request to rename file -> {}, new name -> {}",
+                    currentPath.getFileName(), newPath.getFileName());
+
+            Files.move(currentPath, newPath);
+            c.writeAndFlush(new ServerResponseFileList(scanFile(newPath.getParent()), newPath.getParent().toString()));
+            c.writeAndFlush(new ServerResponseTextMessage("/file_renamed"));
+        }
+    }
+
+    @SneakyThrows
+    private void deletePath(ClientRequestDelete msg, Channel c) {
+        Path pathToBeDeleted = Paths.get(msg.getPath());
+        log.debug("[ SERVER ]: Request to delete -> {}", pathToBeDeleted);
+        if (Files.isDirectory(pathToBeDeleted)) {
+            Files.walk(pathToBeDeleted)
+                    .sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+        } else {
+            Files.delete(pathToBeDeleted);
+        }
+
+        c.writeAndFlush(new ServerResponseFileList(scanFile(pathToBeDeleted.getParent()), pathToBeDeleted.getParent().toString()));
+        c.writeAndFlush(new ServerResponseTextMessage("/path_deleted"));
+    }
+
+    @SneakyThrows
+    private void receiveFileFromClient(FileTransfer m, Channel c) {
         Path filePath = Paths.get(m.getFilePath());
-        Files.write(filePath, m.getFile());
-        c.writeAndFlush(new ServerResponseFileList(scanFile(filePath.getParent()), filePath.getParent().toString()));
-        c.writeAndFlush(new ServerResponseTextMessage("/file_uploaded"));
+
+        if (m.getCurrentBatch() == 1) {
+            fos = new FileOutputStream(filePath.toFile());
+            log.debug("[ SERVER ]: Receiving file -> {}", m.getFileName());
+        }
+
+        fos.write(m.getFilePart(), 0, m.getBatchLength());
+        log.info(
+                "[ Client ]: Receiving File -> {}, part {}/{} sent.",
+                m.getFileName(), m.getCurrentBatch(), m.getBatchCount()
+        );
+
+        if (m.getCurrentBatch() == m.getBatchCount()) {
+            fos.close();
+            c.writeAndFlush(new ServerResponseFileList(scanFile(filePath.getParent()), filePath.getParent().toString()));
+            c.writeAndFlush(new ServerResponseTextMessage("/file_uploaded"));
+        }
     }
 
     @SneakyThrows
     private void sendFileToClient(ClientRequestFile m, Channel c) {
         Path filePath = Paths.get(m.getFilePath());
         String fileName = filePath.getFileName().toString();
-        byte[] file = Files.readAllBytes(filePath);
-        c.writeAndFlush(new ServerResponseFile(fileName, file));
+        File file = filePath.toFile();
+
+        long fileLength = file.length();
+        long batchCount = (fileLength + BUFFER_SIZE - 1) / BUFFER_SIZE;
+        int currentBatch = 1;
+
+        try (FileInputStream fis = new FileInputStream(file)) {
+            while (fis.available() > 0) {
+                int read = fis.read(buf);
+                c.writeAndFlush(new FileTransfer(fileName, "", batchCount, currentBatch, read, buf));
+                currentBatch++;
+                log.info("[ SERVER ]: File -> {}, part {}/{} sent.", fileName, currentBatch, batchCount);
+            }
+        }
+        log.info("[ SERVER ]: File -> {}, transfer finished.", fileName);
+
     }
 
     @SneakyThrows
@@ -87,16 +169,16 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
         }
     }
 
-    private void goToPathUp(String currentDir, Channel c) {
-        Path serverCurrentDir = Paths.get(currentDir);
+    private void goToPathUp(ClientRequestGoUp clientRequestGoUp, Channel c) {
+        Path serverCurrentDir = Paths.get(clientRequestGoUp.getCurrentDir());
         if (!serverCurrentDir.equals(clientDir)) {
             Path newPath = serverCurrentDir.getParent();
             c.writeAndFlush(new ServerResponseFileList(scanFile(newPath), newPath.toString()));
         }
     }
 
-    private void goToPath(String currentDir, String fileName, Channel c) {
-        Path newPath = Paths.get(currentDir, fileName);
+    private void goToPath(ClientRequestGoIn clientRequestGoIn, Channel c) {
+        Path newPath = Paths.get(clientRequestGoIn.getCurrentDir(), clientRequestGoIn.getFileName());
         c.writeAndFlush(new ServerResponseFileList(scanFile(newPath), newPath.toString()));
     }
 
@@ -112,7 +194,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     }
 
     @SneakyThrows
-    private void authUser(User u, Channel c) {
+    private void authUser(ClientRequestAuthUser u, Channel c) {
         String authLogin = u.getLogin();
         String authPass = u.getPassword();
         String[] selectUser = authProvider.getUsers(u.getLogin());
@@ -138,7 +220,7 @@ public class MainHandler extends ChannelInboundHandlerAdapter {
     }
 
     @SneakyThrows
-    private void registerNewUser(User u, Channel c) {
+    private void registerNewUser(ClientRequestAuthUser u, Channel c) {
         String authLogin = u.getLogin();
         String authPass = u.getPassword();
         String[] selectUser = authProvider.getUsers(u.getLogin());

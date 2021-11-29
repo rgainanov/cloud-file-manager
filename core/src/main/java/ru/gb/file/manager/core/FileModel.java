@@ -6,8 +6,7 @@ import java.nio.file.Path;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 
-public class FileModel extends Message{
-
+public class FileModel implements Message {
     public static final String UP_TOKEN = "[ .. ]";
 
     public String fileName;
@@ -64,7 +63,6 @@ public class FileModel extends Message{
         return fileExt;
     }
 
-
     public long getFileLength() {
         return fileLength;
     }
@@ -82,5 +80,11 @@ public class FileModel extends Message{
                 ", fileModifyDate='" + fileModifyDate +
                 '}';
     }
+
+    @Override
+    public CommandTypes getType() {
+        return CommandTypes.FILE_MODEL;
+    }
+
 }
 

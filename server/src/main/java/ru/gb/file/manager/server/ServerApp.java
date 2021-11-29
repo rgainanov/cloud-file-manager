@@ -16,12 +16,15 @@ import lombok.extern.slf4j.Slf4j;
 public class ServerApp {
 
     private static final int PORT = 8189;
+    private AuthProvider authProvider;
 
     public void run() {
         EventLoopGroup bossGroup = new NioEventLoopGroup();
         EventLoopGroup workerGroup = new NioEventLoopGroup();
+        authProvider = new DbAuthProvider();
 
         try {
+            authProvider.start();
             ServerBootstrap b = new ServerBootstrap();
             b.group(bossGroup, workerGroup)
                     .channel(NioServerSocketChannel.class)
@@ -31,7 +34,7 @@ public class ServerApp {
                             socketChannel.pipeline().addLast(
                                     new ObjectDecoder(ClassResolvers.cacheDisabled(null)),
                                     new ObjectEncoder(),
-                                    new MainHandler()
+                                    new MainHandler(authProvider)
                             );
                         }
                     });
@@ -41,6 +44,7 @@ public class ServerApp {
         } catch (Exception e) {
             log.error("", e);
         } finally {
+            authProvider.stop();
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
