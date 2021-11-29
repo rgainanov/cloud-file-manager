@@ -21,7 +21,7 @@
       fx:controller="ru.gb.file.manager.client.ClientController" stylesheets="stylesheet.css">
     <MenuBar VBox.vgrow="ALWAYS">
         <Menu text="File">
-            <MenuItem disable="true" text="Exit" onAction="#menuItemFileExitAction"/>
+            <MenuItem text="Exit" onAction="#menuItemFileExitAction"/>
         </Menu>
         <Menu text="Server">
             <MenuItem disable="true" text="Disconnect" onAction="#menuItemDisconnectFromServer"/>
@@ -34,7 +34,8 @@
                     <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                 </padding>
             </TextField>
-            <PasswordField fx:id="passwordField" prefHeight="32.0" prefWidth="170.0" promptText="Password">
+            <PasswordField fx:id="passwordField" prefHeight="32.0" prefWidth="170.0" promptText="Password"
+                           onAction="#logInButtonAction">
                 <padding>
                     <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                 </padding>
@@ -71,17 +72,26 @@
                 </columns>
             </TableView>
             <HBox spacing="5.0" VBox.vgrow="ALWAYS">
-                <Button disable="true" maxWidth="Infinity" mnemonicParsing="false" text="TOUCH" HBox.hgrow="ALWAYS">
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="TOUCH" HBox.hgrow="ALWAYS"
+                        onAction="#clientCreateFileButtonAction">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button disable="true" maxWidth="Infinity" mnemonicParsing="false" text="MKDIR" HBox.hgrow="ALWAYS">
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="MKDIR" HBox.hgrow="ALWAYS"
+                        onAction="#clientCreateDirectoryButtonAction">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button disable="true" maxWidth="Infinity" mnemonicParsing="false" text="RM" HBox.hgrow="ALWAYS">
+                <Button maxWidth="Infinity" mnemonicParsing="false" text="RENAME" HBox.hgrow="ALWAYS"
+                        onAction="#clientRenameButtonAction">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button fx:id="clientDeleteButton" maxWidth="Infinity" mnemonicParsing="false" text="RM"
+                        HBox.hgrow="ALWAYS" onAction="#clientDeleteButtonAction">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
@@ -146,8 +156,22 @@
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
                 </Button>
-                <Button fx:id="serverRemoveButton" disable="true" maxWidth="Infinity" mnemonicParsing="false" text="RM"
-                        HBox.hgrow="ALWAYS">
+                <Button fx:id="serverRenameButton" disable="true" maxWidth="Infinity" mnemonicParsing="false"
+                        text="RENAME" HBox.hgrow="ALWAYS"
+                        onAction="#serverRenameButtonAction">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button fx:id="serverDeleteButton" disable="true" maxWidth="Infinity" mnemonicParsing="false" text="RM"
+                        HBox.hgrow="ALWAYS" onAction="#serverDeleteButtonAction">
+                    <padding>
+                        <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
+                    </padding>
+                </Button>
+                <Button fx:id="serverShareFileButton" disable="true" maxWidth="Infinity" mnemonicParsing="false"
+                        text="SHARE FILE"
+                        HBox.hgrow="ALWAYS" onAction="#serverShareFileButtonAction">
                     <padding>
                         <Insets bottom="5.0" left="5.0" right="5.0" top="5.0"/>
                     </padding>
@@ -178,7 +202,8 @@
                 </Insets>
             </HBox.margin>
         </Text>
-        <ProgressBar fx:id="progressBar" progress="0.0" prefWidth="200.0" HBox.hgrow="ALWAYS">
+        <ProgressBar fx:id="progressBar" visible="false" managed="false" progress="0.0" prefWidth="200.0"
+                     HBox.hgrow="ALWAYS">
             <padding>
                 <Insets bottom="5.0" left="10.0" right="10.0" top="5.0"/>
             </padding>

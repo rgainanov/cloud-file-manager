@@ -16,6 +16,8 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import ru.gb.file.manager.core.*;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.Socket;
@@ -23,17 +25,18 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.ResourceBundle;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Slf4j
 public class ClientController implements Initializable {
 
+    private static final int BUFFER_SIZE = 8 * 1024;
+
     private static final String HOST = "localhost";
     private static final int PORT = 8189;
+
+    private byte[] buf;
 
     //    Client View Side
     public TextField clientPathField;
@@ -42,6 +45,7 @@ public class ClientController implements Initializable {
     public TableColumn<FileModel, String> clientColumnFileExt;
     public TableColumn<FileModel, Long> clientColumnFileLength;
     public TableColumn<FileModel, String> clientColumnFileModifyDate;
+    public Button clientDeleteButton;
 
     // Server View Side
     public String serverCurrentDir;
@@ -51,6 +55,11 @@ public class ClientController implements Initializable {
     public TableColumn<FileModel, String> serverColumnFileExt;
     public TableColumn<FileModel, Long> serverColumnFileLength;
     public TableColumn<FileModel, String> serverColumnFileModifyDate;
+    public Button serverCreateFileButton;
+    public Button serverCreateDirectoryButton;
+    public Button serverDeleteButton;
+    public Button serverRenameButton;
+    public Button serverShareFileButton;
 
     public Text infoMessageTextField;
 
@@ -64,9 +73,7 @@ public class ClientController implements Initializable {
     public Button downloadButtonBottom;
     public Button uploadButtonMiddle;
     public Button uploadButtonBottom;
-    public Button serverCreateFileButton;
-    public Button serverCreateDirectoryButton;
-    public Button serverRemoveButton;
+
     public ProgressBar progressBar;
 
     private Path clientRoot;
@@ -74,21 +81,24 @@ public class ClientController implements Initializable {
     private ObservableList<FileModel> clientFilesObservableList;
     private ObservableList<FileModel> serverFilesObservableList;
 
+    private Socket socket;
     private ObjectEncoderOutputStream os;
     private ObjectDecoderInputStream is;
 
+    @SneakyThrows
     public void menuItemFileExitAction(ActionEvent actionEvent) {
-
+        Platform.exit();
     }
 
     @Override
     public void initialize(URL location, ResourceBundle resources) {
+        buf = new byte[BUFFER_SIZE];
         clientDefaultParent = Paths.get("client");
         clientRoot = Paths.get("client", "CLIENT_STORAGE");
         initializeTableViews();
         clientNavigateToPath(clientRoot);
         try {
-            Socket socket = new Socket(HOST, PORT);
+            socket = new Socket(HOST, PORT);
             os = new ObjectEncoderOutputStream(socket.getOutputStream());
             is = new ObjectDecoderInputStream(socket.getInputStream());
 
@@ -105,8 +115,8 @@ public class ClientController implements Initializable {
                             case SERVER_RESPONSE_FILE_LIST:
                                 serverFileListMessageHandler((ServerResponseFileList) msg);
                                 break;
-                            case SERVER_RESPONSE_FILE:
-                                serverFileReceiver((ServerResponseFile) msg);
+                            case FILE_TRANSFER:
+                                serverFileReceiver((FileTransfer) msg);
                                 break;
                         }
                     } catch (ClassNotFoundException | IOException e) {
@@ -142,6 +152,12 @@ public class ClientController implements Initializable {
         }
         if (tm.equals("/auth_ok")) {
             infoMessageTextField.setText("Successfully authenticated.");
+            passwordField.clear();
+            passwordField.setDisable(true);
+            loginField.clear();
+            loginField.setDisable(true);
+//            progressBar.setVisible(true);
+//            progressBar.setManaged(true);
             logInButton.setDisable(true);
             signInButton.setDisable(true);
             downloadButtonMiddle.setDisable(false);
@@ -150,6 +166,8 @@ public class ClientController implements Initializable {
             uploadButtonBottom.setDisable(false);
             serverCreateFileButton.setDisable(false);
             serverCreateDirectoryButton.setDisable(false);
+            serverDeleteButton.setDisable(false);
+            serverRenameButton.setDisable(false);
         }
         if (tm.equals("/file_create_error")) {
             infoMessageTextField.setText("Error occurred. Cannot create file.");
@@ -160,9 +178,18 @@ public class ClientController implements Initializable {
         if (tm.equals("/file_uploaded")) {
             infoMessageTextField.setText("File Uploaded Successfully.");
         }
+        if (tm.equals("/path_deleted")) {
+            infoMessageTextField.setText("Success");
+        }
+        if (tm.equals("/directory_renamed")) {
+            infoMessageTextField.setText("Success. Remote directory renamed");
+        }
+        if (tm.equals("/file_renamed")) {
+            infoMessageTextField.setText("Success. Remote file renamed");
+        }
     }
 
-    private boolean receiveFile(ServerResponseFile msg, Path filePath) {
+    private boolean receiveFile(FileTransfer msg, Path filePath) {
         log.debug("[ CLIENT ]: Receiving file -> {}", msg.getFileName());
         try (FileOutputStream fos = new FileOutputStream(filePath.toFile())) {
             while (true) {
@@ -171,12 +198,10 @@ public class ClientController implements Initializable {
 
                 double progress = (1.0 * msg.getCurrentBatch()) / msg.getBatchCount();
 
-                Platform.runLater(() -> {
-                    progressBar.setProgress(progress);
-                });
+//                Platform.runLater(() -> {
+//                    progressBar.setProgress(progress);
+//                });
 
-//                infoMessageTextField.setText("Receiving file " + msg.getFileName() +
-//                        " part " + msg.getCurrentBatch() + "/" + msg.getBatchCount() + ".");
                 log.debug(
                         "[ CLIENT ]: Receiving file -> {}, {}/{} - {}",
                         msg.getFileName(),
@@ -187,8 +212,10 @@ public class ClientController implements Initializable {
                 if (msg.getBatchCount() == msg.getCurrentBatch()) {
                     break;
                 }
-                msg = (ServerResponseFile) is.readObject();
+                msg = (FileTransfer) is.readObject();
             }
+//            progressBar.setProgress(0.0);
+//            progressBar.setDisable(true);
             return true;
         } catch (Exception e) {
             log.error("", e);
@@ -197,28 +224,21 @@ public class ClientController implements Initializable {
     }
 
     @SneakyThrows
-    private void serverFileReceiver(ServerResponseFile msg) {
+    private void serverFileReceiver(FileTransfer msg) {
         FileModel fileModel = clientTableView.getSelectionModel().getSelectedItem();
-        progressBar.setVisible(true);
-        progressBar.setManaged(true);
         if (fileModel == null) {
             Path filePath = clientRoot.resolve(msg.getFileName());
             boolean isFileReceived = receiveFile(msg, filePath);
             if (isFileReceived) {
                 clientNavigateToPath(clientRoot);
                 infoMessageTextField.setText("File Downloaded Successfully.");
+                return;
             } else {
                 infoMessageTextField.setText("Error occurred. File has not been downloaded");
             }
-//            Files.write(filePath, msg.getFilePart());
-//            clientNavigateToPath(clientRoot);
-//            infoMessageTextField.setText("File Downloaded Successfully.");
         }
         if (fileModel != null && fileModel.isDirectory()) {
             Path filePath = clientRoot.resolve(fileModel.getFileName()).resolve(msg.getFileName());
-//            Files.write(filePath, msg.getFilePart());
-//            clientNavigateToPath(filePath.getParent());
-//            infoMessageTextField.setText("File Downloaded Successfully.");
             boolean isFileReceived = receiveFile(msg, filePath);
             if (isFileReceived) {
                 clientNavigateToPath(clientRoot);
@@ -370,54 +390,38 @@ public class ClientController implements Initializable {
 
     @SneakyThrows
     public void serverFileCreateButtonAction(ActionEvent actionEvent) {
-        // ToDo Replace strings with Paths
-        TextInputDialog dialog = new TextInputDialog();
-        DialogPane dialogPane = dialog.getDialogPane();
-        dialogPane.getStylesheets().add(getClass().getResource("/stylesheet.css").toExternalForm());
-        dialogPane.getStyleClass().add("dialog");
-        dialog.setTitle("Cloud File Manager");
-        dialog.setHeaderText("Create File dialog");
-        dialog.setContentText("Enter File name : ");
-        Optional<String> result = dialog.showAndWait();
-        if (result.isPresent()) {
+        String newRemoteFileName = genericPopUpDialog("Create", "file");
+        if (newRemoteFileName != null) {
             FileModel serverSelectedFileModel = serverTableView.getSelectionModel().getSelectedItem();
             if (serverSelectedFileModel != null) {
                 Path p = Paths.get(serverCurrentDir, serverSelectedFileModel.getFileName());
-                os.writeObject(new ClientRequestFileCreate(result.get().trim(), p.toString()));
+                os.writeObject(new ClientRequestFileCreate(newRemoteFileName, p.toString()));
             } else {
-                os.writeObject(new ClientRequestFileCreate(result.get().trim(), serverCurrentDir));
+                os.writeObject(new ClientRequestFileCreate(newRemoteFileName, serverCurrentDir));
             }
             os.flush();
-            log.debug("[ CLIENT ]: Request for file creation sent to Server, file name -> {}.", result.get());
+            log.debug("[ CLIENT ]: Request for file creation sent to Server, file name -> {}.", newRemoteFileName);
         }
     }
 
     @SneakyThrows
     public void serverDirectoryCreateButtonAction(ActionEvent actionEvent) {
-        // ToDo Replace strings with Paths
-        TextInputDialog dialog = new TextInputDialog();
-        DialogPane dialogPane = dialog.getDialogPane();
-        dialogPane.getStylesheets().add(getClass().getResource("/stylesheet.css").toExternalForm());
-        dialogPane.getStyleClass().add("dialog");
-        dialog.setTitle("Cloud File Manager");
-        dialog.setHeaderText("Create Directory dialog");
-        dialog.setContentText("Enter Directory name : ");
-        Optional<String> result = dialog.showAndWait();
-        if (result.isPresent()) {
+        String newRemoteDirectoryName = genericPopUpDialog("Create", "directory");
+        if (newRemoteDirectoryName != null) {
             FileModel serverSelectedFileModel = serverTableView.getSelectionModel().getSelectedItem();
             if (serverSelectedFileModel != null) {
                 if (serverSelectedFileModel.isDirectory()) {
-                    Path p = Paths.get(serverCurrentDir, serverSelectedFileModel.getFileName(), result.get().trim());
+                    Path p = Paths.get(serverCurrentDir, serverSelectedFileModel.getFileName(), newRemoteDirectoryName);
                     os.writeObject(new ClientRequestDirectoryCreate(p.toString()));
                 } else {
                     infoMessageTextField.setText("Error occurred. Please select directory.");
                 }
             } else {
-                Path p = Paths.get(serverCurrentDir, result.get().trim());
+                Path p = Paths.get(serverCurrentDir, newRemoteDirectoryName);
                 os.writeObject(new ClientRequestDirectoryCreate(p.toString()));
             }
             os.flush();
-            log.debug("[ CLIENT ]: Request for directory creation sent to Server, directory name -> {}.", result.get());
+            log.debug("[ CLIENT ]: Request for directory creation sent to Server, directory name -> {}.", newRemoteDirectoryName);
         }
     }
 
@@ -441,29 +445,244 @@ public class ClientController implements Initializable {
     }
 
     @SneakyThrows
+    private void sendFile(Path localFilePath, Path destinationFilePath) {
+        File file = localFilePath.toFile();
+        long fileLength = file.length();
+        long batchCount = (fileLength + BUFFER_SIZE - 1) / BUFFER_SIZE;
+        int currentBatch = 1;
+
+        try (FileInputStream fis = new FileInputStream(file)) {
+            while (fis.available() > 0) {
+                int read = fis.read(buf);
+                os.writeObject(new FileTransfer(
+                        localFilePath.getFileName().toString(),
+                        destinationFilePath.toString(),
+                        batchCount,
+                        currentBatch,
+                        read,
+                        buf
+                ));
+
+                double progress = (1.0 * currentBatch) / batchCount;
+
+//                progressBar.setProgress(progress);
+
+                log.debug(
+                        "[ CLIENT ]: Uploading file -> {}, {}/{} - {}",
+                        localFilePath.getFileName().toString(),
+                        currentBatch,
+                        batchCount,
+                        progress
+                );
+
+                currentBatch++;
+            }
+        }
+        os.flush();
+        log.info("[ Client ]: File -> {}, transfer finished.", localFilePath.getFileName());
+    }
+
+
+    @SneakyThrows
     public void serverUploadButtonAction(ActionEvent actionEvent) {
         FileModel clientSelectedFileModel = clientTableView.getSelectionModel().getSelectedItem();
         FileModel serverSelectedFileModel = serverTableView.getSelectionModel().getSelectedItem();
         if (clientSelectedFileModel != null) {
+
             if (!clientSelectedFileModel.isDirectory()) {
-                String fileName = clientSelectedFileModel.getFileName() + "." + clientSelectedFileModel.getFileExt();
+                String fileName = getFileNameWithExtension(clientSelectedFileModel);
                 Path filePath = clientRoot.resolve(fileName);
-                Path newServerFileDirectory = Paths.get(serverCurrentDir);
+                Path destinationFilePath = Paths.get(serverCurrentDir);
                 if (serverSelectedFileModel != null) {
                     if (serverSelectedFileModel.isDirectory()) {
-                        newServerFileDirectory = newServerFileDirectory.resolve(serverSelectedFileModel.getFileName()).resolve(fileName);
+                        destinationFilePath = destinationFilePath.resolve(serverSelectedFileModel.getFileName()).resolve(fileName);
                     } else {
                         infoMessageTextField.setText("Error occurred. Cannot upload into file.");
                     }
                 } else {
-                    newServerFileDirectory = newServerFileDirectory.resolve(fileName);
+                    destinationFilePath = destinationFilePath.resolve(fileName);
                 }
-                byte[] file = Files.readAllBytes(filePath);
-                os.writeObject(new ClientFileTransfer(newServerFileDirectory.toString(), file));
-                os.flush();
+                infoMessageTextField.setText("Uploading file : " + fileName);
+                sendFile(filePath, destinationFilePath);
             } else {
                 infoMessageTextField.setText("Error occurred. Cannot upload directory.");
             }
+        } else {
+            infoMessageTextField.setText("Error occurred. Select directory or file for upload.");
         }
+    }
+
+    private String getFileNameWithExtension(FileModel fm) {
+        StringBuilder sb = new StringBuilder();
+        if (!fm.isDirectory()) {
+            sb.append(fm.getFileName());
+            sb.append(".");
+            sb.append(fm.getFileExt());
+        } else {
+            sb.append(fm.getFileName());
+        }
+        return sb.toString();
+    }
+
+    @SneakyThrows
+    public void clientDeleteButtonAction() {
+        FileModel fm = clientTableView.getSelectionModel().getSelectedItem();
+        Path filePath = clientRoot.resolve(getFileNameWithExtension(fm));
+        log.debug("[ CLIENT ]: To be deleted -> {}", filePath);
+
+        if (fm != null) {
+            if (Files.isDirectory(filePath)) {
+                Files.walk(filePath)
+                        .sorted(Comparator.reverseOrder())
+                        .map(Path::toFile)
+                        .forEach(File::delete);
+            } else {
+                Files.delete(filePath);
+            }
+            clientNavigateToPath(filePath.getParent());
+            return;
+        }
+        infoMessageTextField.setText("Error occurred. Select directory or file to be deleted.");
+    }
+
+    @SneakyThrows
+    public void serverDeleteButtonAction(ActionEvent actionEvent) {
+        FileModel fm = serverTableView.getSelectionModel().getSelectedItem();
+        Path remoteToBeDeletedPath;
+
+        if (fm != null) {
+            remoteToBeDeletedPath = Paths.get(serverCurrentDir).resolve(getFileNameWithExtension(fm));
+            os.writeObject(new ClientRequestDelete(remoteToBeDeletedPath.toString()));
+            os.flush();
+            log.debug("[ CLIENT ]: Requesting Remote to delete -> {}", remoteToBeDeletedPath);
+        } else {
+            infoMessageTextField.setText("Error occurred. Select Remote directory or file to be deleted.");
+        }
+
+    }
+
+    private String genericPopUpDialog(String action, String type) {
+        TextInputDialog dialog = new TextInputDialog();
+        DialogPane dialogPane = dialog.getDialogPane();
+        dialogPane.getStylesheets().add(getClass().getResource("/stylesheet.css").toExternalForm());
+        dialogPane.getStyleClass().add("dialog");
+        dialog.setTitle("Cloud File Manager");
+        dialog.setHeaderText(action + " " + type + " dialog");
+        dialog.setContentText("Enter " + type + " name : ");
+        Optional<String> result = dialog.showAndWait();
+        if (result.isPresent()) {
+            return result.get().trim();
+        }
+        return null;
+    }
+
+
+    @SneakyThrows
+    public void clientCreateFileButtonAction(ActionEvent actionEvent) {
+        // ToDo Replace strings with Paths
+        String newFileName = genericPopUpDialog("Create", "file");
+        if (newFileName != null) {
+            FileModel clientSelectedFileModel = clientTableView.getSelectionModel().getSelectedItem();
+            if (clientSelectedFileModel != null && clientSelectedFileModel.isDirectory()) {
+                Path p = clientRoot.resolve(clientSelectedFileModel.getFileName()).resolve(newFileName);
+                Files.createFile(p);
+                infoMessageTextField.setText("Success. File Created.");
+                clientNavigateToPath(p.getParent());
+            } else {
+                Path p = clientRoot.resolve(newFileName);
+                Files.createFile(p);
+                infoMessageTextField.setText("Success. File Created.");
+                clientNavigateToPath(p.getParent());
+            }
+
+            log.debug("[ CLIENT ]: File created, directory name -> {}.", newFileName);
+        }
+    }
+
+    @SneakyThrows
+    public void clientCreateDirectoryButtonAction(ActionEvent actionEvent) {
+        String newDirectoryName = genericPopUpDialog("Create", "directory");
+        if (newDirectoryName != null) {
+            FileModel clientSelectedFileModel = clientTableView.getSelectionModel().getSelectedItem();
+            if (clientSelectedFileModel != null && clientSelectedFileModel.isDirectory()) {
+                Path p = clientRoot.resolve(clientSelectedFileModel.getFileName()).resolve(newDirectoryName);
+                Files.createDirectory(p);
+                infoMessageTextField.setText("Success. Directory Created.");
+                clientNavigateToPath(p);
+            } else {
+                Path p = clientRoot.resolve(newDirectoryName);
+                Files.createDirectory(p);
+                infoMessageTextField.setText("Success. Directory Created.");
+                clientNavigateToPath(p);
+            }
+
+            log.debug("[ CLIENT ]: Directory created, directory name -> {}.", newDirectoryName);
+        }
+    }
+
+    @SneakyThrows
+    public void clientRenameButtonAction(ActionEvent actionEvent) {
+        FileModel fm = clientTableView.getSelectionModel().getSelectedItem();
+        if (fm != null) {
+            if (!fm.isDirectory()) {
+                String newName = genericPopUpDialog("Rename", "file");
+                if (newName != null) {
+                    String currentName = getFileNameWithExtension(fm);
+                    Path currentPath = clientRoot.resolve(currentName);
+                    Path newPath = clientRoot.resolve(newName);
+                    log.debug("[ CLIENT ]: File rename request -> {}, new file name -> {}",
+                            currentName, newName
+                    );
+
+                    Files.move(currentPath, newPath);
+                    clientNavigateToPath(newPath.getParent());
+                    infoMessageTextField.setText("Success. File renamed.");
+                } else {
+                    infoMessageTextField.setText("Error occurred. Enter new file name");
+                }
+
+            } else {
+                String newName = genericPopUpDialog("Rename", "directory");
+                if (newName != null) {
+                    String currentName = getFileNameWithExtension(fm);
+                    Path currentPath = clientRoot.resolve(currentName);
+                    Path newPath = clientRoot.resolve(newName);
+                    log.debug("[ CLIENT ]: Directory rename request -> {}, new file name -> {}",
+                            currentName, newName
+                    );
+
+                    Files.move(currentPath, currentPath.resolveSibling(newName));
+                    clientNavigateToPath(newPath.getParent());
+                    infoMessageTextField.setText("Success. Directory renamed.");
+                } else {
+                    infoMessageTextField.setText("Error occurred. Enter new directory name");
+                }
+            }
+        } else {
+            infoMessageTextField.setText("Error occurred. Select file or directory to be renamed.");
+        }
+    }
+
+    @SneakyThrows
+    public void serverRenameButtonAction(ActionEvent actionEvent) {
+        FileModel fm = serverTableView.getSelectionModel().getSelectedItem();
+        if (fm != null) {
+            String newName = genericPopUpDialog("Rename", "file");
+            if (newName != null) {
+                String currentName = getFileNameWithExtension(fm);
+                String currentPath = Paths.get(serverCurrentDir).resolve(currentName).toString();
+                String newPath = Paths.get(serverCurrentDir).resolve(newName).toString();
+                os.writeObject(new ClientRequestRename(currentPath, newPath));
+                os.flush();
+                log.debug("[ CLIENT ]: Remote rename request sent. Old name -> {}, new name -> {}",
+                        currentName, newName
+                );
+            }
+        } else {
+            infoMessageTextField.setText("Error occurred. Select file or directory to be renamed.");
+        }
+    }
+
+    public void serverShareFileButtonAction(ActionEvent actionEvent) {
     }
 }

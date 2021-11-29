@@ -7,13 +7,12 @@ import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import ru.gb.file.manager.core.*;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -26,6 +25,7 @@ public class MainHandler extends SimpleChannelInboundHandler<Message> {
     private Path serverRoot;
     private Path clientDir;
 
+    private OutputStream fos;
     private byte[] buf;
 
     public MainHandler(AuthProvider authProvider) {
@@ -36,8 +36,6 @@ public class MainHandler extends SimpleChannelInboundHandler<Message> {
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, Message msg) throws Exception {
-        log.debug("[ SERVER ]: Message received -> {}", msg.getClass().getName());
-
         switch (msg.getType()) {
             case AUTH_REQUEST:
                 ClientRequestAuthUser u = (ClientRequestAuthUser) msg;
@@ -58,24 +56,84 @@ public class MainHandler extends SimpleChannelInboundHandler<Message> {
             case CLIENT_REQUEST_TOUCH:
                 createNewFile((ClientRequestFileCreate) msg, ctx.channel());
                 break;
+            case CLIENT_REQUEST_RENAME:
+                rename((ClientRequestRename) msg, ctx.channel());
+                break;
             case CLIENT_REQUEST_PATH_GO_IN:
                 goToPath((ClientRequestGoIn) msg, ctx.channel());
                 break;
             case CLIENT_REQUEST_PATH_GO_UP:
                 goToPathUp((ClientRequestGoUp) msg, ctx.channel());
                 break;
-            case CLIENT_FILE_TRANSFER:
-                receiveFileFromClient((ClientFileTransfer) msg, ctx.channel());
+            case FILE_TRANSFER:
+                receiveFileFromClient((FileTransfer) msg, ctx.channel());
+                break;
+            case CLIENT_REQUEST_DELETE:
+                deletePath((ClientRequestDelete) msg, ctx.channel());
                 break;
         }
     }
 
     @SneakyThrows
-    private void receiveFileFromClient(ClientFileTransfer m, Channel c) {
+    private void rename(ClientRequestRename msg, Channel c) {
+        Path currentPath = Paths.get(msg.getCurrentPath());
+        Path newPath = Paths.get(msg.getNewPath());
+
+        if (Files.isDirectory(currentPath)) {
+            String newName = newPath.getFileName().toString();
+            log.debug("[ SERVER ]: Request to rename directory -> {}, new name -> {}",
+                    currentPath.getFileName(), newName);
+
+            Files.move(currentPath, currentPath.resolveSibling(newName));
+            c.writeAndFlush(new ServerResponseFileList(scanFile(newPath.getParent()), newPath.getParent().toString()));
+            c.writeAndFlush(new ServerResponseTextMessage("/directory_renamed"));
+        } else {
+            log.debug("[ SERVER ]: Request to rename file -> {}, new name -> {}",
+                    currentPath.getFileName(), newPath.getFileName());
+
+            Files.move(currentPath, newPath);
+            c.writeAndFlush(new ServerResponseFileList(scanFile(newPath.getParent()), newPath.getParent().toString()));
+            c.writeAndFlush(new ServerResponseTextMessage("/file_renamed"));
+        }
+    }
+
+    @SneakyThrows
+    private void deletePath(ClientRequestDelete msg, Channel c) {
+        Path pathToBeDeleted = Paths.get(msg.getPath());
+        log.debug("[ SERVER ]: Request to delete -> {}", pathToBeDeleted);
+        if (Files.isDirectory(pathToBeDeleted)) {
+            Files.walk(pathToBeDeleted)
+                    .sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+        } else {
+            Files.delete(pathToBeDeleted);
+        }
+
+        c.writeAndFlush(new ServerResponseFileList(scanFile(pathToBeDeleted.getParent()), pathToBeDeleted.getParent().toString()));
+        c.writeAndFlush(new ServerResponseTextMessage("/path_deleted"));
+    }
+
+    @SneakyThrows
+    private void receiveFileFromClient(FileTransfer m, Channel c) {
         Path filePath = Paths.get(m.getFilePath());
-        Files.write(filePath, m.getFile());
-        c.writeAndFlush(new ServerResponseFileList(scanFile(filePath.getParent()), filePath.getParent().toString()));
-        c.writeAndFlush(new ServerResponseTextMessage("/file_uploaded"));
+
+        if (m.getCurrentBatch() == 1) {
+            fos = new FileOutputStream(filePath.toFile());
+            log.debug("[ SERVER ]: Receiving file -> {}", m.getFileName());
+        }
+
+        fos.write(m.getFilePart(), 0, m.getBatchLength());
+        log.info(
+                "[ Client ]: Receiving File -> {}, part {}/{} sent.",
+                m.getFileName(), m.getCurrentBatch(), m.getBatchCount()
+        );
+
+        if (m.getCurrentBatch() == m.getBatchCount()) {
+            fos.close();
+            c.writeAndFlush(new ServerResponseFileList(scanFile(filePath.getParent()), filePath.getParent().toString()));
+            c.writeAndFlush(new ServerResponseTextMessage("/file_uploaded"));
+        }
     }
 
     @SneakyThrows
@@ -91,12 +149,11 @@ public class MainHandler extends SimpleChannelInboundHandler<Message> {
         try (FileInputStream fis = new FileInputStream(file)) {
             while (fis.available() > 0) {
                 int read = fis.read(buf);
-                c.writeAndFlush(new ServerResponseFile(fileName, batchCount, currentBatch, read, buf));
+                c.writeAndFlush(new FileTransfer(fileName, "", batchCount, currentBatch, read, buf));
                 currentBatch++;
                 log.info("[ SERVER ]: File -> {}, part {}/{} sent.", fileName, currentBatch, batchCount);
             }
         }
-//        c.flush();
         log.info("[ SERVER ]: File -> {}, transfer finished.", fileName);
 
     }

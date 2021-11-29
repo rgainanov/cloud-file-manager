@@ -63,7 +63,6 @@ public class FileModel implements Message {
         return fileExt;
     }
 
-
     public long getFileLength() {
         return fileLength;
     }
