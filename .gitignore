@@ -1,4 +1,6 @@
 # Project exclude paths
 /client/target/
+/client/CLIENT_STORAGE/
 /core/target/
 /server/target/
+/server/SERVER_STORAGE/
