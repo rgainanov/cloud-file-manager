@@ -3,7 +3,9 @@ package ru.gb.file.manager.server;
 import lombok.extern.slf4j.Slf4j;
 
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 @Slf4j
 public class DbAuthProvider implements AuthProvider{
@@ -65,9 +67,24 @@ public class DbAuthProvider implements AuthProvider{
                 String[] results = new String[2];
                 results[0] = rs.getString("login");
                 results[1] = rs.getString("password");
-                System.out.println(Arrays.toString(results));
                 return results;
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    @Override
+    public List<String> getAllUsers() {
+        try {
+            String query = "SELECT login FROM users;";
+            ResultSet rs = stmt.executeQuery(query);
+            List<String> results = new ArrayList<>();
+            while (rs.next()) {
+                results.add(rs.getString("login"));
+            }
+            return results;
         } catch (SQLException e) {
             e.printStackTrace();
         }

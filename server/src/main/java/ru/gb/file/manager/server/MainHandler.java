@@ -11,6 +11,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -71,7 +72,31 @@ public class MainHandler extends SimpleChannelInboundHandler<Message> {
             case CLIENT_REQUEST_DELETE:
                 deletePath((ClientRequestDelete) msg, ctx.channel());
                 break;
+            case CLIENT_REQUEST_ALL_USERS:
+                sendListOfRegisteredUsers(ctx.channel());
+                break;
+            case CLIENT_REQUEST_FILE_SHARE:
+                shareFile((ClientRequestFileShare) msg, ctx.channel());
+                break;
         }
+    }
+
+    @SneakyThrows
+    private void shareFile(ClientRequestFileShare msg, Channel c) {
+        Path origFilePath = Paths.get(msg.getFilePath());
+        String user = msg.getLogin();
+        Path sharedPath = serverRoot.resolve(user).resolve("Shared With Me").resolve(origFilePath.getFileName());
+        if (!Files.exists(sharedPath.getParent())) {
+            Files.createDirectory(sharedPath.getParent());
+        }
+        Files.copy(origFilePath, sharedPath, StandardCopyOption.REPLACE_EXISTING);
+        c.writeAndFlush(new ServerResponseTextMessage("/file_shared"));
+    }
+
+    private void sendListOfRegisteredUsers(Channel c) {
+        List<String> registeredUsers = authProvider.getAllUsers();
+        c.writeAndFlush(new ServerResponseRegisteredUsers(registeredUsers));
+        log.debug("[ SERVER ]: RegisteredUsers -> {}", registeredUsers);
     }
 
     @SneakyThrows

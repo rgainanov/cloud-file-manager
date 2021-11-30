@@ -6,8 +6,11 @@ import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.TextInputDialog;
 import javafx.stage.Stage;
+import lombok.Data;
 
+@Data
 public class ClientMain extends Application {
+
     @Override
     public void start(Stage primaryStage) throws Exception {
         String css = this.getClass().getResource("/stylesheet.css").toExternalForm();
@@ -21,6 +24,7 @@ public class ClientMain extends Application {
         primaryStage.setOnCloseRequest(event ->
                 System.exit(0));
     }
+
 
     public static void main(String[] args) {
         launch(args);
