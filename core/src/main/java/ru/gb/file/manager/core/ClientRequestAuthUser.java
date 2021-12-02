@@ -1,6 +1,7 @@
 package ru.gb.file.manager.core;
 
 import lombok.Data;
+import sun.security.rsa.RSAKeyPairGenerator;
 
 @Data
 public class ClientRequestAuthUser implements Message {
@@ -18,6 +19,10 @@ public class ClientRequestAuthUser implements Message {
         this.login = login;
         this.password = password;
         this.newUser = newUser;
+    }
+
+    private String encrypt(String password) {
+        return null;
     }
 
     @Override
